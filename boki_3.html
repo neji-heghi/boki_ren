@@ -1,0 +1,963 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>仕分けスワイプ練習</title>
+  <style>
+    :root{
+      --bg: #f3f5fb;
+      --card: #ffffff;
+      --text: #111827;
+      --muted: #6b7280;
+      --shadow: 0 18px 55px rgba(15, 23, 42, 0.14);
+      --shadow2: 0 10px 28px rgba(15, 23, 42, 0.10);
+      --radius: 22px;
+
+      --green: #2ecc71;
+      --debit: #6ad6ff;   /* 左：借方 */
+      --credit: #ff7a7a;  /* 右：貸方 */
+
+      --line: rgba(17, 24, 39, 0.08);
+    }
+
+    *{ box-sizing: border-box; }
+    html, body{ height: 100%; }
+    body{
+      margin: 0;
+      color: var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Segoe UI", sans-serif;
+      -webkit-tap-highlight-color: transparent;
+
+      display: flex;
+      justify-content: center;
+
+      background:
+        radial-gradient(380px 680px at 10% 60%, rgba(106, 214, 255, 0.35), rgba(243,245,251,0) 60%),
+        radial-gradient(380px 680px at 90% 60%, rgba(255, 122, 122, 0.30), rgba(243,245,251,0) 60%),
+        radial-gradient(700px 520px at 50% 0%, rgba(46, 204, 113, 0.18), rgba(243,245,251,0) 60%),
+        linear-gradient(180deg, #f7f8fd, #eef1f9);
+    }
+
+    /* 縦長スマホ想定 */
+    .app{
+      width: min(460px, 100%);
+      min-height: 100vh;
+      padding: calc(12px + env(safe-area-inset-top)) 14px calc(14px + env(safe-area-inset-bottom));
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    /* ===== Top HUD (画像の上部バーっぽく) ===== */
+    .topHud{
+      display: flex;
+      align-items: center;
+      gap: 12px;
+
+      padding: 12px 12px;
+      background: rgba(255,255,255,0.75);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      box-shadow: var(--shadow2);
+      backdrop-filter: blur(10px);
+    }
+
+    .progressWrap{
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .progressTrack{
+      flex: 1;
+      height: 12px;
+      border-radius: 999px;
+      background: rgba(17,24,39,0.08);
+      overflow: hidden;
+      position: relative;
+    }
+    .progressFill{
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, rgba(46,204,113,0.95), rgba(46,204,113,0.65));
+      border-radius: 999px;
+      transition: width 220ms ease;
+    }
+
+    .scoreWrap{
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+    .scoreText{
+      font-weight: 900;
+      letter-spacing: 0.02em;
+    }
+    .scoreText span{
+      font-variant-numeric: tabular-nums lining-nums;
+    }
+
+    .iconBtn{
+      width: 36px;
+      height: 36px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.9);
+      box-shadow: 0 8px 18px rgba(15,23,42,0.10);
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      user-select: none;
+    }
+    .iconBtn:active{ transform: translateY(1px); }
+
+    /* ===== Question bubble ===== */
+    .questionCard{
+      background: rgba(255,255,255,0.85);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      box-shadow: var(--shadow2);
+      padding: 14px 14px;
+      backdrop-filter: blur(10px);
+    }
+    .questionMeta{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .questionText{
+      margin: 0;
+      font-size: 16px;
+      line-height: 1.55;
+      text-align: center;
+      word-break: break-word;
+    }
+
+    /* ===== Arena ===== */
+    .arena{
+      position: relative;
+      flex: 1;
+      min-height: 420px;
+      border-radius: 22px;
+      overflow: hidden;
+      background: rgba(255,255,255,0.18);
+      border: 1px solid rgba(17,24,39,0.06);
+    }
+
+    /* 左右ゾーン */
+    .zone{
+      position: absolute;
+      top: 14px;
+      bottom: 14px;
+      width: 92px;
+      border-radius: 28px;
+      display: flex;
+      align-items: flex-start; /* 上寄せ */
+      justify-content: center;
+      padding-top: 16px; /* 上に余白 */
+      pointer-events: none;
+
+      filter: saturate(1.05);
+      opacity: 0.92;
+      transition: transform 120ms ease, box-shadow 120ms ease, opacity 120ms ease;
+    }
+
+    .zone.left{
+      left: 14px;
+      background: linear-gradient(180deg, rgba(106,214,255,0.75), rgba(106,214,255,0.22));
+      box-shadow: 0 0 0 rgba(106,214,255,0);
+    }
+    .zone.right{
+      right: 14px;
+      background: linear-gradient(180deg, rgba(255,122,122,0.70), rgba(255,122,122,0.18));
+      box-shadow: 0 0 0 rgba(255,122,122,0);
+    }
+
+    .zone.active{
+      opacity: 1;
+      transform: scale(1.02);
+    }
+    .zone.left.active{
+      box-shadow: 0 0 42px rgba(106,214,255,0.45);
+    }
+    .zone.right.active{
+      box-shadow: 0 0 42px rgba(255,122,122,0.40);
+    }
+
+    .zoneLabel{
+      writing-mode: vertical-rl;
+      text-orientation: mixed;
+      font-weight: 900;
+      letter-spacing: 0.06em;
+      color: rgba(17,24,39,0.78);
+      font-size: 14px;
+      user-select: none;
+    }
+
+    /* 中央デッキ */
+    .deck{
+      position: absolute;
+      left: 50%;
+      top: 54%;
+      transform: translate(-50%, -50%);
+      width: min(320px, 74vw);
+      height: min(320px, 74vw);
+    }
+
+    .swipeCard{
+      position: absolute;
+      inset: 0;
+      border-radius: 28px;
+      background: linear-gradient(180deg, #ffffff, #fbfcff);
+      border: 1px solid rgba(17,24,39,0.08);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+
+      display: flex;
+      align-items: center;
+      justify-content: center;
+
+      user-select: none;
+      touch-action: none; /* swipe的スワイプのため */
+      backface-visibility: hidden;
+      -webkit-font-smoothing: antialiased;
+
+      transition: transform 220ms cubic-bezier(.16, 1, .3, 1), opacity 220ms ease;
+    }
+
+    .swipeCard::before{
+      content:"";
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(260px 180px at 25% 20%, rgba(106,214,255,0.14), rgba(255,255,255,0) 60%),
+        radial-gradient(260px 180px at 78% 25%, rgba(255,122,122,0.12), rgba(255,255,255,0) 60%);
+      pointer-events: none;
+    }
+
+    /* スタンプ（ドラッグ中に出る） */
+    .stamp{
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      padding: 10px 12px;
+      border-radius: 14px;
+      font-weight: 1000;
+      letter-spacing: 0.08em;
+      font-size: 18px;
+      border: 3px solid rgba(17,24,39,0.25);
+      background: rgba(255,255,255,0.75);
+      backdrop-filter: blur(8px);
+      opacity: 0;
+      transform: rotate(-14deg) scale(0.98);
+      transition: opacity 80ms linear;
+      user-select: none;
+      pointer-events: none;
+    }
+    .stamp.credit{
+      left: auto;
+      right: 16px;
+      transform: rotate(14deg) scale(0.98);
+    }
+    .stamp.debit{
+      border-color: rgba(0, 140, 255, 0.35);
+      color: rgba(0, 120, 230, 0.92);
+    }
+    .stamp.credit{
+      border-color: rgba(255, 80, 80, 0.35);
+      color: rgba(255, 70, 70, 0.92);
+    }
+
+    .cardInner{
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      padding: 26px 22px;
+      text-align: center;
+    }
+
+    .cardAccount{
+      font-weight: 1000;
+      letter-spacing: 0.02em;
+      font-size: clamp(22px, 6.2vw, 40px);
+      line-height: 1.15;
+      margin-bottom: 12px;
+      word-break: break-word;
+    }
+
+    .cardAmount{
+      font-weight: 1000;
+      font-variant-numeric: tabular-nums lining-nums;
+      letter-spacing: 0.02em;
+      font-size: clamp(44px, 12vw, 70px);
+      line-height: 1.0;
+      color: rgba(17,24,39,0.92);
+    }
+    .cardAmount .yen{
+      font-size: 0.40em;
+      font-weight: 900;
+      color: rgba(17,24,39,0.70);
+      margin-left: 2px;
+    }
+
+    .cardHint{
+      margin-top: 10px;
+      font-size: 12px;
+      color: rgba(107,114,128,0.92);
+      line-height: 1.4;
+      min-height: 1.2em;
+    }
+
+    /* 下にあるカードの見え方（JSで transform を上書きします） */
+    .swipeCard.isUnder{
+      box-shadow: 0 14px 40px rgba(15,23,42,0.10);
+    }
+
+    /* ===== Feedback overlay ===== */
+    .feedback{
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 140ms ease;
+      z-index: 50;
+    }
+    .feedback.show{ opacity: 1; }
+
+    .feedbackMark{
+      font-size: 96px;
+      font-weight: 1000;
+      text-shadow: 0 18px 42px rgba(0,0,0,0.25);
+      transform: translateY(-10px);
+    }
+    .feedbackCaption{
+      margin-top: 6px;
+      font-size: 13px;
+      color: rgba(17,24,39,0.70);
+      text-align: center;
+      padding: 0 16px;
+      font-weight: 700;
+    }
+
+    /* ===== End modal ===== */
+    .overlay{
+      position: fixed;
+      inset: 0;
+      background: rgba(17,24,39,0.30);
+      backdrop-filter: blur(10px);
+      display: none;
+      place-items: center;
+      padding: 18px;
+      z-index: 60;
+    }
+    .overlay.show{ display: grid; }
+
+    .modal{
+      width: min(420px, 100%);
+      background: rgba(255,255,255,0.92);
+      border: 1px solid rgba(17,24,39,0.10);
+      border-radius: 22px;
+      box-shadow: var(--shadow);
+      padding: 16px 16px 14px;
+    }
+    .modal h2{
+      margin: 0 0 10px;
+      font-size: 16px;
+      font-weight: 1000;
+    }
+    .modal p{
+      margin: 0 0 12px;
+      color: rgba(17,24,39,0.78);
+      line-height: 1.6;
+      font-size: 13px;
+      font-weight: 650;
+    }
+    .modal .grid{
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin: 10px 0 12px;
+    }
+    .kpi{
+      padding: 12px 12px;
+      border-radius: 18px;
+      background: rgba(17,24,39,0.04);
+      border: 1px solid rgba(17,24,39,0.08);
+    }
+    .kpi .k{
+      font-size: 11px;
+      color: rgba(107,114,128,0.92);
+      font-weight: 800;
+    }
+    .kpi .v{
+      margin-top: 6px;
+      font-size: 18px;
+      font-weight: 1000;
+      font-variant-numeric: tabular-nums lining-nums;
+    }
+
+    .modalActions{
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+    .btn{
+      border: 1px solid rgba(17,24,39,0.10);
+      background: rgba(255,255,255,0.95);
+      padding: 10px 12px;
+      border-radius: 999px;
+      font-weight: 900;
+      cursor: pointer;
+      box-shadow: 0 10px 18px rgba(15,23,42,0.08);
+    }
+    .btn.primary{
+      background: rgba(17,24,39,0.90);
+      color: white;
+      border-color: rgba(17,24,39,0.10);
+    }
+    .btn:active{ transform: translateY(1px); }
+
+    /* 小さい端末調整 */
+    @media (max-width: 360px){
+      .zone{ width: 82px; }
+      .deck{ width: min(300px, 78vw); height: min(300px, 78vw); }
+      .feedbackMark{ font-size: 84px; }
+    }
+
+    @media (prefers-reduced-motion: reduce){
+      .swipeCard, .progressFill, .feedback{ transition: none !important; }
+      .zone{ transition: none !important; }
+      .iconBtn:active, .btn:active{ transform: none; }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app">
+    <div class="topHud">
+      <div class="progressWrap">
+        <div class="progressTrack" aria-hidden="true">
+          <div class="progressFill" id="progressFill"></div>
+        </div>
+      </div>
+
+      <div class="scoreWrap">
+        <div class="scoreText">スコア: <span id="score">0</span></div>
+        <button class="iconBtn" id="btnReset" title="この問題をやり直す" aria-label="この問題をやり直す">↺</button>
+        <button class="iconBtn" id="btnRestart" title="最初から" aria-label="最初から">⟲</button>
+      </div>
+    </div>
+
+    <div class="questionCard">
+      <div class="questionMeta">
+        <span id="qIndex">Q-/-</span>
+        <span id="missesText" style="display:none;">ミス: <span id="misses">0</span></span>
+      </div>
+      <p class="questionText" id="questionText"></p>
+    </div>
+
+    <div class="arena">
+      <div class="zone left" id="zoneLeft"><div class="zoneLabel">借方（デビット）</div></div>
+      <div class="zone right" id="zoneRight"><div class="zoneLabel">貸方（クレジット）</div></div>
+
+      <div class="deck" id="deck" aria-label="仕分けカードをスワイプ"></div>
+    </div>
+  </div>
+
+  <div class="feedback" id="feedback">
+    <div style="display:flex; flex-direction:column; align-items:center;">
+      <div class="feedbackMark" id="feedbackMark">〇</div>
+      <div class="feedbackCaption" id="feedbackCaption"></div>
+    </div>
+  </div>
+
+  <div class="overlay" id="overlay">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="endTitle">
+      <h2 id="endTitle">結果</h2>
+      <p id="endText"></p>
+      <div class="grid">
+        <div class="kpi">
+          <div class="k">解いた問題数</div>
+          <div class="v" id="kpiSolved">0</div>
+        </div>
+        <div class="kpi">
+          <div class="k">スコア</div>
+          <div class="v" id="kpiScore">0</div>
+        </div>
+      </div>
+      <div class="modalActions">
+        <button class="btn" id="btnClose">閉じる</button>
+        <button class="btn primary" id="btnReplay">もう一回</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (() => {
+    'use strict';
+
+    // 1プレイの出題数（0以下なら全件からランダム順で全部出題）
+    const QUIZ_SIZE = 10;
+
+    // 問題バンク（JSON文字列にして「構文エラーで画面が死ぬ」を回避）
+    const BANK_JSON = `
+[
+{"q":"商品を現金で3,000円販売した。","cards":[{"account":"現金","amount":3000,"correct":"debit"},{"account":"売上","amount":3000,"correct":"credit"}]},
+{"q":"商品を掛けで5,000円販売した。","cards":[{"account":"売掛金","amount":5000,"correct":"debit"},{"account":"売上","amount":5000,"correct":"credit"}]},
+{"q":"商品を6,000円販売し、代金は普通預金に振り込まれた。","cards":[{"account":"普通預金","amount":6000,"correct":"debit"},{"account":"売上","amount":6000,"correct":"credit"}]},
+{"q":"商品を現金で2,400円仕入れた。","cards":[{"account":"仕入","amount":2400,"correct":"debit"},{"account":"現金","amount":2400,"correct":"credit"}]},
+{"q":"商品を掛けで4,000円仕入れた。","cards":[{"account":"仕入","amount":4000,"correct":"debit"},{"account":"買掛金","amount":4000,"correct":"credit"}]},
+{"q":"商品を小切手を振り出して3,200円仕入れた。","cards":[{"account":"仕入","amount":3200,"correct":"debit"},{"account":"当座預金","amount":3200,"correct":"credit"}]},
+{"q":"売掛金1,200円を現金で回収した。","cards":[{"account":"現金","amount":1200,"correct":"debit"},{"account":"売掛金","amount":1200,"correct":"credit"}]},
+{"q":"売掛金2,500円が普通預金口座へ振り込まれた。","cards":[{"account":"普通預金","amount":2500,"correct":"debit"},{"account":"売掛金","amount":2500,"correct":"credit"}]},
+{"q":"得意先に対する掛け代金1,000円について、送金小切手を受け取った。","cards":[{"account":"現金","amount":1000,"correct":"debit"},{"account":"売掛金","amount":1000,"correct":"credit"}]},
+{"q":"買掛金800円を現金で支払った。","cards":[{"account":"買掛金","amount":800,"correct":"debit"},{"account":"現金","amount":800,"correct":"credit"}]},
+{"q":"買掛金1,200円を小切手を振り出して支払った。","cards":[{"account":"買掛金","amount":1200,"correct":"debit"},{"account":"当座預金","amount":1200,"correct":"credit"}]},
+{"q":"買掛金2,000円を普通預金から振り込みで支払った。","cards":[{"account":"買掛金","amount":2000,"correct":"debit"},{"account":"普通預金","amount":2000,"correct":"credit"}]},
+{"q":"掛で販売した商品が返品され、売掛金800円を取り消した。","cards":[{"account":"売上返品","amount":800,"correct":"debit"},{"account":"売掛金","amount":800,"correct":"credit"}]},
+{"q":"掛で仕入れた商品を返品し、買掛金600円を取り消した。","cards":[{"account":"買掛金","amount":600,"correct":"debit"},{"account":"仕入返品","amount":600,"correct":"credit"}]},
+{"q":"得意先より売掛金2,000円を回収した。なお、先方の都合により100円値引きした。","cards":[{"account":"現金","amount":1900,"correct":"debit"},{"account":"売上割引","amount":100,"correct":"debit"},{"account":"売掛金","amount":2000,"correct":"credit"}]},
+{"q":"買掛金3,000円を支払った。なお、仕入先から50円の値引きを受けた。","cards":[{"account":"買掛金","amount":3000,"correct":"debit"},{"account":"現金","amount":2950,"correct":"credit"},{"account":"仕入割引","amount":50,"correct":"credit"}]},
+{"q":"仕入れに伴う運賃300円を現金で支払った（仕入に含める）。","cards":[{"account":"仕入","amount":300,"correct":"debit"},{"account":"現金","amount":300,"correct":"credit"}]},
+{"q":"商品を販売し、荷造運賃200円を現金で支払った。","cards":[{"account":"荷造運賃","amount":200,"correct":"debit"},{"account":"現金","amount":200,"correct":"credit"}]},
+{"q":"振込手数料110円を現金で支払った。","cards":[{"account":"支払手数料","amount":110,"correct":"debit"},{"account":"現金","amount":110,"correct":"credit"}]},
+{"q":"当座預金へ現金10,000円を預け入れた。","cards":[{"account":"当座預金","amount":10000,"correct":"debit"},{"account":"現金","amount":10000,"correct":"credit"}]},
+{"q":"当座預金から現金5,000円を引き出した。","cards":[{"account":"現金","amount":5000,"correct":"debit"},{"account":"当座預金","amount":5000,"correct":"credit"}]},
+{"q":"普通預金へ現金8,000円を預け入れた。","cards":[{"account":"普通預金","amount":8000,"correct":"debit"},{"account":"現金","amount":8000,"correct":"credit"}]},
+{"q":"普通預金から現金3,000円を引き出した。","cards":[{"account":"現金","amount":3000,"correct":"debit"},{"account":"普通預金","amount":3000,"correct":"credit"}]},
+{"q":"水道光熱費900円が当座預金から引き落とされた。","cards":[{"account":"水道光熱費","amount":900,"correct":"debit"},{"account":"当座預金","amount":900,"correct":"credit"}]},
+{"q":"普通預金に受取利息200円が入金された。","cards":[{"account":"普通預金","amount":200,"correct":"debit"},{"account":"受取利息","amount":200,"correct":"credit"}]},
+{"q":"売掛金1,800円について約束手形を受け取った。","cards":[{"account":"受取手形","amount":1800,"correct":"debit"},{"account":"売掛金","amount":1800,"correct":"credit"}]},
+{"q":"買掛金2,000円について約束手形を振り出した。","cards":[{"account":"買掛金","amount":2000,"correct":"debit"},{"account":"支払手形","amount":2000,"correct":"credit"}]},
+{"q":"受取手形1,500円が期日に当座預金に入金された。","cards":[{"account":"当座預金","amount":1500,"correct":"debit"},{"account":"受取手形","amount":1500,"correct":"credit"}]},
+{"q":"支払手形2,000円が期日に当座預金から引き落とされた。","cards":[{"account":"支払手形","amount":2000,"correct":"debit"},{"account":"当座預金","amount":2000,"correct":"credit"}]},
+{"q":"受取手形1,200円を裏書譲渡して買掛金の支払いに充てた。","cards":[{"account":"買掛金","amount":1200,"correct":"debit"},{"account":"受取手形","amount":1200,"correct":"credit"}]},
+{"q":"受取手形3,000円を銀行で割り引き、割引料100円を差し引かれて現金を受け取った。","cards":[{"account":"現金","amount":2900,"correct":"debit"},{"account":"手形売却損","amount":100,"correct":"debit"},{"account":"受取手形","amount":3000,"correct":"credit"}]},
+{"q":"備品を現金で3,000円購入した。","cards":[{"account":"備品","amount":3000,"correct":"debit"},{"account":"現金","amount":3000,"correct":"credit"}]},
+{"q":"備品を掛けで4,500円購入した。","cards":[{"account":"備品","amount":4500,"correct":"debit"},{"account":"未払金","amount":4500,"correct":"credit"}]},
+{"q":"未払金4,500円を現金で支払った。","cards":[{"account":"未払金","amount":4500,"correct":"debit"},{"account":"現金","amount":4500,"correct":"credit"}]},
+{"q":"備品を現金2,000円で売却した（帳簿価額は2,000円とする）。","cards":[{"account":"現金","amount":2000,"correct":"debit"},{"account":"備品","amount":2000,"correct":"credit"}]},
+{"q":"帳簿価額1,500円の備品を現金2,000円で売却した。","cards":[{"account":"現金","amount":2000,"correct":"debit"},{"account":"備品","amount":1500,"correct":"credit"},{"account":"固定資産売却益","amount":500,"correct":"credit"}]},
+{"q":"帳簿価額2,000円の備品を現金1,500円で売却した。","cards":[{"account":"現金","amount":1500,"correct":"debit"},{"account":"固定資産売却損","amount":500,"correct":"debit"},{"account":"備品","amount":2000,"correct":"credit"}]},
+{"q":"備品を掛けで2,000円売却した（帳簿価額2,000円）。","cards":[{"account":"未収金","amount":2000,"correct":"debit"},{"account":"備品","amount":2000,"correct":"credit"}]},
+{"q":"未収金2,000円を現金で回収した。","cards":[{"account":"現金","amount":2000,"correct":"debit"},{"account":"未収金","amount":2000,"correct":"credit"}]},
+{"q":"通信費500円を現金で支払った。","cards":[{"account":"通信費","amount":500,"correct":"debit"},{"account":"現金","amount":500,"correct":"credit"}]},
+{"q":"給料2,400円を現金で支払った。","cards":[{"account":"給料","amount":2400,"correct":"debit"},{"account":"現金","amount":2400,"correct":"credit"}]},
+{"q":"広告宣伝費1,000円を現金で支払った。","cards":[{"account":"広告宣伝費","amount":1000,"correct":"debit"},{"account":"現金","amount":1000,"correct":"credit"}]},
+{"q":"地代家賃4,000円を現金で支払った。","cards":[{"account":"地代家賃","amount":4000,"correct":"debit"},{"account":"現金","amount":4000,"correct":"credit"}]},
+{"q":"消耗品費300円を現金で支払った。","cards":[{"account":"消耗品費","amount":300,"correct":"debit"},{"account":"現金","amount":300,"correct":"credit"}]},
+{"q":"受取手数料600円を現金で受け取った。","cards":[{"account":"現金","amount":600,"correct":"debit"},{"account":"受取手数料","amount":600,"correct":"credit"}]},
+{"q":"受取家賃5,000円を現金で受け取った。","cards":[{"account":"現金","amount":5000,"correct":"debit"},{"account":"受取家賃","amount":5000,"correct":"credit"}]},
+{"q":"雑収入250円を現金で受け取った。","cards":[{"account":"現金","amount":250,"correct":"debit"},{"account":"雑収入","amount":250,"correct":"credit"}]},
+{"q":"支払保険料1,200円を現金で支払った。","cards":[{"account":"支払保険料","amount":1200,"correct":"debit"},{"account":"現金","amount":1200,"correct":"credit"}]},
+{"q":"銀行から借入金10,000円をし、普通預金に入金された。","cards":[{"account":"普通預金","amount":10000,"correct":"debit"},{"account":"借入金","amount":10000,"correct":"credit"}]},
+{"q":"借入金の返済として元金2,000円と利息100円を現金で支払った。","cards":[{"account":"借入金","amount":2000,"correct":"debit"},{"account":"支払利息","amount":100,"correct":"debit"},{"account":"現金","amount":2100,"correct":"credit"}]},
+{"q":"貸付金5,000円を現金で貸し付けた。","cards":[{"account":"貸付金","amount":5000,"correct":"debit"},{"account":"現金","amount":5000,"correct":"credit"}]},
+{"q":"貸付金の返済として元金1,000円と利息50円を現金で受け取った。","cards":[{"account":"現金","amount":1050,"correct":"debit"},{"account":"貸付金","amount":1000,"correct":"credit"},{"account":"受取利息","amount":50,"correct":"credit"}]},
+{"q":"資本金として現金50,000円を出資した。","cards":[{"account":"現金","amount":50000,"correct":"debit"},{"account":"資本金","amount":50000,"correct":"credit"}]},
+{"q":"事業主が備品3,000円相当を出資した。","cards":[{"account":"備品","amount":3000,"correct":"debit"},{"account":"資本金","amount":3000,"correct":"credit"}]},
+{"q":"事業主が生活費として現金10,000円を引き出した。","cards":[{"account":"引出金","amount":10000,"correct":"debit"},{"account":"現金","amount":10000,"correct":"credit"}]},
+{"q":"前払家賃1,800円を現金で支払った。","cards":[{"account":"前払家賃","amount":1800,"correct":"debit"},{"account":"現金","amount":1800,"correct":"credit"}]},
+{"q":"1年分の保険料12,000円を現金で支払い、前払保険料として処理した。","cards":[{"account":"前払保険料","amount":12000,"correct":"debit"},{"account":"現金","amount":12000,"correct":"credit"}]},
+{"q":"3か月分の家賃9,000円を受け取り、前受家賃として処理した。","cards":[{"account":"現金","amount":9000,"correct":"debit"},{"account":"前受家賃","amount":9000,"correct":"credit"}]},
+{"q":"得意先から商品代金の前受金2,000円を現金で受け取った。","cards":[{"account":"現金","amount":2000,"correct":"debit"},{"account":"前受金","amount":2000,"correct":"credit"}]},
+{"q":"前受金2,000円に対して商品を引き渡し、売上として処理した。","cards":[{"account":"前受金","amount":2000,"correct":"debit"},{"account":"売上","amount":2000,"correct":"credit"}]},
+{"q":"当月分の家賃4,000円を前払家賃から振り替えた（期末整理）。","cards":[{"account":"地代家賃","amount":4000,"correct":"debit"},{"account":"前払家賃","amount":4000,"correct":"credit"}]},
+{"q":"前受家賃9,000円のうち当期分3,000円を収益に振り替えた（期末整理）。","cards":[{"account":"前受家賃","amount":3000,"correct":"debit"},{"account":"受取家賃","amount":3000,"correct":"credit"}]},
+{"q":"期末に未払給料1,500円を計上した。","cards":[{"account":"給料","amount":1500,"correct":"debit"},{"account":"未払給料","amount":1500,"correct":"credit"}]},
+{"q":"期末に未払水道光熱費400円を計上した。","cards":[{"account":"水道光熱費","amount":400,"correct":"debit"},{"account":"未払金","amount":400,"correct":"credit"}]},
+{"q":"期末に未収利息300円を計上した。","cards":[{"account":"未収利息","amount":300,"correct":"debit"},{"account":"受取利息","amount":300,"correct":"credit"}]},
+{"q":"期末に未払利息200円を計上した。","cards":[{"account":"支払利息","amount":200,"correct":"debit"},{"account":"未払利息","amount":200,"correct":"credit"}]},
+{"q":"期末に未収家賃1,200円を計上した。","cards":[{"account":"未収家賃","amount":1200,"correct":"debit"},{"account":"受取家賃","amount":1200,"correct":"credit"}]},
+{"q":"消耗品を現金2,000円で購入し、消耗品として処理した。","cards":[{"account":"消耗品","amount":2000,"correct":"debit"},{"account":"現金","amount":2000,"correct":"credit"}]},
+{"q":"期末に消耗品の未消費残高が500円であった（消耗品勘定残高は2,000円）。","cards":[{"account":"消耗品費","amount":1500,"correct":"debit"},{"account":"消耗品","amount":1500,"correct":"credit"}]},
+{"q":"決算にあたり、備品の減価償却費1,200円を計上した。","cards":[{"account":"減価償却費","amount":1200,"correct":"debit"},{"account":"備品減価償却累計額","amount":1200,"correct":"credit"}]},
+{"q":"決算で期末商品棚卸高5,000円を計上した。","cards":[{"account":"繰越商品","amount":5000,"correct":"debit"},{"account":"仕入","amount":5000,"correct":"credit"}]},
+{"q":"得意先の倒産により売掛金1,000円が回収不能となった。","cards":[{"account":"貸倒損失","amount":1000,"correct":"debit"},{"account":"売掛金","amount":1000,"correct":"credit"}]},
+{"q":"決算で貸倒引当金を200円設定した（期首残高0とする）。","cards":[{"account":"貸倒引当金繰入","amount":200,"correct":"debit"},{"account":"貸倒引当金","amount":200,"correct":"credit"}]},
+{"q":"売掛金800円が回収不能となったが、貸倒引当金で処理した（貸倒引当金残高は十分にある）。","cards":[{"account":"貸倒引当金","amount":800,"correct":"debit"},{"account":"売掛金","amount":800,"correct":"credit"}]},
+{"q":"現金を実査したところ、帳簿残高より200円多かった。","cards":[{"account":"現金","amount":200,"correct":"debit"},{"account":"現金過不足","amount":200,"correct":"credit"}]},
+{"q":"現金過不足200円は雑収入であることが判明した。","cards":[{"account":"現金過不足","amount":200,"correct":"debit"},{"account":"雑収入","amount":200,"correct":"credit"}]},
+{"q":"現金を実査したところ、帳簿残高より100円少なかった。","cards":[{"account":"現金過不足","amount":100,"correct":"debit"},{"account":"現金","amount":100,"correct":"credit"}]},
+{"q":"現金過不足100円は通信費の計上漏れであることが判明した。","cards":[{"account":"通信費","amount":100,"correct":"debit"},{"account":"現金過不足","amount":100,"correct":"credit"}]},
+{"q":"従業員に出張旅費として現金3,000円を仮払した。","cards":[{"account":"仮払金","amount":3000,"correct":"debit"},{"account":"現金","amount":3000,"correct":"credit"}]},
+{"q":"出張旅費2,800円を精算し、差額200円を現金で受け取った（仮払金3,000円）。","cards":[{"account":"旅費交通費","amount":2800,"correct":"debit"},{"account":"現金","amount":200,"correct":"debit"},{"account":"仮払金","amount":3000,"correct":"credit"}]},
+{"q":"出張旅費3,200円を精算し、不足分200円を現金で支払った（仮払金3,000円）。","cards":[{"account":"旅費交通費","amount":3200,"correct":"debit"},{"account":"仮払金","amount":3000,"correct":"credit"},{"account":"現金","amount":200,"correct":"credit"}]},
+{"q":"従業員の交通費300円を現金で立替払いした。","cards":[{"account":"立替金","amount":300,"correct":"debit"},{"account":"現金","amount":300,"correct":"credit"}]},
+{"q":"立替金300円を従業員から現金で受け取った。","cards":[{"account":"現金","amount":300,"correct":"debit"},{"account":"立替金","amount":300,"correct":"credit"}]}
+]
+`.trim();
+
+    // ===== DOM =====
+    const elProgressFill = document.getElementById('progressFill');
+    const elScore = document.getElementById('score');
+    const elQIndex = document.getElementById('qIndex');
+    const elQuestionText = document.getElementById('questionText');
+    const elDeck = document.getElementById('deck');
+
+    const elZoneLeft = document.getElementById('zoneLeft');
+    const elZoneRight = document.getElementById('zoneRight');
+
+    const elFeedback = document.getElementById('feedback');
+    const elFeedbackMark = document.getElementById('feedbackMark');
+    const elFeedbackCaption = document.getElementById('feedbackCaption');
+
+    const elOverlay = document.getElementById('overlay');
+    const elEndText = document.getElementById('endText');
+    const elKpiSolved = document.getElementById('kpiSolved');
+    const elKpiScore = document.getElementById('kpiScore');
+
+    const btnReset = document.getElementById('btnReset');
+    const btnRestart = document.getElementById('btnRestart');
+    const btnClose = document.getElementById('btnClose');
+    const btnReplay = document.getElementById('btnReplay');
+
+    // ===== Utils =====
+    const fmtAmount = (n) => new Intl.NumberFormat('ja-JP').format(n);
+
+    function shuffle(arr){
+      const a = arr.slice();
+      for(let i=a.length-1;i>0;i--){
+        const j = Math.floor(Math.random()*(i+1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    }
+
+    function vibrate(pattern){
+      if(navigator.vibrate) navigator.vibrate(pattern);
+    }
+
+    function showFeedback(mark, caption = ''){
+      if(!elFeedback) return;
+      elFeedbackMark.textContent = mark;
+      elFeedbackCaption.textContent = caption;
+      elFeedback.classList.add('show');
+      window.setTimeout(() => elFeedback.classList.remove('show'), 420);
+    }
+
+    function setZoneActive(dir, on){
+      elZoneLeft.classList.toggle('active', on && dir === 'debit');
+      elZoneRight.classList.toggle('active', on && dir === 'credit');
+    }
+
+    // ===== State =====
+    let problemBank = [];
+    let session = [];   // 今回の挑戦セット
+    let idx = 0;        // 現在の問題index
+    let score = 0;      // 正解スワイプ数（カード単位）
+    let misses = 0;     // ミス回数
+    let currentProblem = null;
+
+    // ===== Core =====
+    function safeParseBank(){
+      try{
+        const parsed = JSON.parse(BANK_JSON);
+        if(!Array.isArray(parsed) || parsed.length === 0) throw new Error('問題バンクが空です');
+        // 簡易バリデーション
+        for(const p of parsed){
+          if(!p || typeof p.q !== 'string' || !Array.isArray(p.cards) || p.cards.length === 0) {
+            throw new Error('問題データ形式が不正です');
+          }
+        }
+        return parsed;
+      }catch(e){
+        elQuestionText.textContent = 'エラー：問題バンクの読み込みに失敗しました。';
+        console.error(e);
+        return [];
+      }
+    }
+
+    function buildSession(){
+      const shuffled = shuffle(problemBank);
+      const size = (QUIZ_SIZE && QUIZ_SIZE > 0) ? Math.min(QUIZ_SIZE, shuffled.length) : shuffled.length;
+      session = shuffled.slice(0, size);
+      idx = 0;
+      score = 0;
+      misses = 0;
+      updateTop();
+      renderProblem();
+    }
+
+    function updateTop(){
+      const total = Math.max(1, session.length);
+      const done = Math.min(idx, total);
+      const pct = Math.round((done / total) * 100);
+      elProgressFill.style.width = pct + '%';
+      elScore.textContent = String(score);
+      elQIndex.textContent = `Q${Math.min(idx+1, total)}/${total}`;
+    }
+
+    function renderProblem(){
+      if(idx >= session.length){
+        endGame();
+        return;
+      }
+
+      currentProblem = session[idx];
+      elQuestionText.textContent = currentProblem.q;
+
+      // デッキ作成（カード順もランダム）
+      elDeck.innerHTML = '';
+      const cards = shuffle(currentProblem.cards);
+
+      // 下→上の順でappend（最後がトップ）
+      for(const c of cards){
+        const cardEl = document.createElement('div');
+        cardEl.className = 'swipeCard';
+        cardEl.dataset.correct = c.correct; // "debit" or "credit"
+        cardEl.dataset.account = c.account;
+        cardEl.dataset.amount = String(c.amount);
+
+        const hint = (c.memo && String(c.memo).trim().length) ? String(c.memo) : '';
+
+        cardEl.innerHTML = `
+          <div class="stamp debit">借方</div>
+          <div class="stamp credit">貸方</div>
+          <div class="cardInner">
+            <div class="cardAccount">${c.account}</div>
+            <div class="cardAmount">${fmtAmount(c.amount)}<span class="yen">円</span></div>
+            <div class="cardHint">${hint}</div>
+          </div>
+        `;
+
+        elDeck.appendChild(cardEl);
+      }
+
+      layoutDeck();
+      attachSwipeToTop();
+      updateTop();
+    }
+
+    function layoutDeck(){
+      const cards = Array.from(elDeck.children);
+      const n = cards.length;
+
+      // bottom -> top: cards[0] ... cards[n-1]
+      for(let i=0;i<n;i++){
+        const depthFromTop = (n - 1) - i; // top=0, under=1...
+        const y = depthFromTop * 8;
+        const s = 1 - depthFromTop * 0.03;
+        const r = (depthFromTop === 0) ? 0 : (depthFromTop % 2 === 0 ? -1 : 1) * depthFromTop * 0.8;
+
+        const card = cards[i];
+        card.style.opacity = String(1 - depthFromTop * 0.06);
+        card.style.transform = `translateY(${y}px) scale(${s}) rotate(${r}deg)`;
+        card.style.zIndex = String(10 + i);
+
+        card.classList.toggle('isUnder', depthFromTop > 0);
+        card.style.pointerEvents = (depthFromTop === 0) ? 'auto' : 'none';
+      }
+    }
+
+    function getTopCard(){
+      const cards = Array.from(elDeck.children);
+      return cards.length ? cards[cards.length - 1] : null;
+    }
+
+    function attachSwipeToTop(){
+      const card = getTopCard();
+      if(!card) return;
+
+      let startX = 0, startY = 0;
+      let dx = 0, dy = 0;
+      let dragging = false;
+      let pid = null;
+
+      const deckRect = elDeck.getBoundingClientRect();
+      const threshold = Math.max(90, Math.floor(deckRect.width * 0.28));
+      const maxTilt = 14;
+
+      const stampDebit = card.querySelector('.stamp.debit');
+      const stampCredit = card.querySelector('.stamp.credit');
+
+      function setStamp(dir, strength01){
+        const a = Math.min(1, Math.max(0, strength01));
+        if(dir === 'debit'){
+          stampDebit.style.opacity = String(0.1 + a * 0.9);
+          stampCredit.style.opacity = '0';
+        }else if(dir === 'credit'){
+          stampCredit.style.opacity = String(0.1 + a * 0.9);
+          stampDebit.style.opacity = '0';
+        }else{
+          stampDebit.style.opacity = '0';
+          stampCredit.style.opacity = '0';
+        }
+      }
+
+      function onDown(e){
+        dragging = true;
+        pid = e.pointerId;
+        card.setPointerCapture(pid);
+        startX = e.clientX;
+        startY = e.clientY;
+        dx = 0; dy = 0;
+        card.style.transition = 'none';
+      }
+
+      function onMove(e){
+        if(!dragging || e.pointerId !== pid) return;
+
+        dx = e.clientX - startX;
+        dy = e.clientY - startY;
+
+        // 縦スクロール誤爆を少し抑える
+        if(Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 18) return;
+
+        const dir = dx < 0 ? 'debit' : 'credit';
+        const strength = Math.min(1, Math.abs(dx) / (threshold * 1.2));
+
+        const tilt = Math.max(-maxTilt, Math.min(maxTilt, (dx / (deckRect.width/2)) * maxTilt));
+        card.style.transform = `translateX(${dx}px) translateY(${dy*0.35}px) rotate(${tilt}deg)`;
+
+        setStamp(dir, strength);
+        setZoneActive(dir, strength > 0.12);
+
+        // 下のカードを少し“持ち上げる”（swipe感）
+        const children = Array.from(elDeck.children);
+        if(children.length >= 2){
+          const under = children[children.length - 2];
+          const baseY = 8;
+          const baseS = 0.97;
+          const lift = strength * 0.75;
+          under.style.transition = 'transform 120ms ease';
+          under.style.transform = `translateY(${baseY * (1 - lift)}px) scale(${baseS + (1-baseS)*lift}) rotate(0deg)`;
+        }
+      }
+
+      function snapBack(withShake){
+        setZoneActive('debit', false);
+        setZoneActive('credit', false);
+        setStamp('', 0);
+
+        if(withShake){
+          // ちょい揺れ
+          card.animate([
+            { transform: `translateX(${dx}px) translateY(${dy*0.35}px) rotate(0deg)` },
+            { transform: `translateX(${dx - 12}px) translateY(${dy*0.20}px) rotate(-2deg)` },
+            { transform: `translateX(${dx + 10}px) translateY(${dy*0.10}px) rotate(2deg)` },
+            { transform: `translateX(0px) translateY(0px) rotate(0deg)` }
+          ], { duration: 260, easing: 'ease-out' });
+        }
+
+        card.style.transition = 'transform 260ms cubic-bezier(.16, 1.2, .3, 1)';
+        card.style.transform = 'translateX(0px) translateY(0px) rotate(0deg)';
+
+        // 下のカードを元へ
+        layoutDeck();
+      }
+
+      function flyOut(dir){
+        setZoneActive('debit', false);
+        setZoneActive('credit', false);
+        setStamp('', 0);
+
+        const sign = (dir === 'debit') ? -1 : 1;
+        const flyX = sign * (window.innerWidth * 1.15);
+        const flyRot = sign * 18;
+
+        card.style.transition = 'transform 320ms cubic-bezier(.2,.8,.2,1), opacity 320ms ease';
+        card.style.transform = `translateX(${flyX}px) translateY(${dy*0.25}px) rotate(${flyRot}deg)`;
+        card.style.opacity = '0';
+
+        const onEnd = () => {
+          card.removeEventListener('transitionend', onEnd);
+          if(card.parentElement) card.parentElement.removeChild(card);
+          // 次のカードへ
+          layoutDeck();
+          attachSwipeToTop();
+
+          // その問題のカードを全部処理したら次の問題
+          if(elDeck.children.length === 0){
+            showFeedback('〇', '次の問題へ');
+            vibrate([20,30,20]);
+            window.setTimeout(() => {
+              idx++;
+              updateTop();
+              renderProblem();
+            }, 520);
+          }
+        };
+        card.addEventListener('transitionend', onEnd);
+      }
+
+      function onUp(e){
+        if(!dragging || e.pointerId !== pid) return;
+        dragging = false;
+
+        const absX = Math.abs(dx);
+        if(absX < threshold){
+          snapBack(false);
+          return;
+        }
+
+        const chosen = (dx < 0) ? 'debit' : 'credit';
+        const correct = card.dataset.correct;
+
+        if(chosen === correct){
+          score += 1; // カード1枚正解で+1（必要なら+10に変更可）
+          elScore.textContent = String(score);
+          flyOut(chosen);
+        }else{
+          misses += 1;
+          showFeedback('×', 'もう一度');
+          vibrate([70]);
+          snapBack(true);
+        }
+      }
+
+      card.addEventListener('pointerdown', onDown, { passive: true });
+      card.addEventListener('pointermove', onMove, { passive: true });
+      card.addEventListener('pointerup', onUp, { passive: true });
+      card.addEventListener('pointercancel', onUp, { passive: true });
+    }
+
+    function resetCurrent(){
+      // 現在の問題を最初から再描画（スコア・進捗は維持）
+      renderProblem();
+    }
+
+    function restartAll(){
+      // ランダムセッションを作り直す（毎回問題が変わる）
+      buildSession();
+    }
+
+    function endGame(){
+      elProgressFill.style.width = '100%';
+      elKpiSolved.textContent = String(session.length);
+      elKpiScore.textContent = String(score);
+      elEndText.textContent = `全${session.length}問おつかれさまでした。スコアは ${score} でした。`;
+      elOverlay.classList.add('show');
+    }
+
+    // ===== init =====
+    problemBank = safeParseBank();
+    if(problemBank.length){
+      buildSession();
+    }else{
+      elQuestionText.textContent = '問題バンクの読み込みに失敗しました。';
+    }
+
+    btnReset.addEventListener('click', resetCurrent);
+    btnRestart.addEventListener('click', restartAll);
+    btnClose.addEventListener('click', () => elOverlay.classList.remove('show'));
+    btnReplay.addEventListener('click', () => {
+      elOverlay.classList.remove('show');
+      restartAll();
+    });
+  })();
+  </script>
+</body>
+</html>
